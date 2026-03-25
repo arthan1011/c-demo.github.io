@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video State Machine Player</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0c;
+      /* --bg-elevated: #141418; */
+      --fg: #e8e8ec;
+      --muted: #6b6b78;
+      --accent: #00d4aa;
+      --accent-dim: rgba(0, 212, 170, 0.15);
+      --accent-glow: rgba(0, 212, 170, 0.4);
+      --border: #2a2a32;
+      --card: #1a1a20;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      gap: 32px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, var(--accent-dim) 0%, transparent 50%),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(100, 60, 180, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+      width: 100%;
+      height: 100%;
+      max-width: 2200px;
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 700px;
+      height: 100%;
+      /* aspect-ratio: 16 / 9; */
+      border-radius: var(--radius);
+      /* overflow: hidden; */
+    }
+
+    .video-stack {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      object-fit: contain;
+      opacity: 0.2;
+      z-index: 1;
+      border-radius: var(--radius);
+    }
+
+    video.active {
+      opacity: 1;
+      z-index: 2;
+    }
+
+    .state-indicator {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(12px);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      transition: all 0.3s ease;
+    }
+
+    .state-indicator .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .state-indicator .state-name {
+      color: var(--fg);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: var(--card);
+      z-index: 10;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+
+    .loading-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .controls-label {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .buttons-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .transition-btn {
+      position: relative;
+      padding: 14px 28px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--fg);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .transition-btn::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      background: linear-gradient(135deg, var(--accent), transparent 50%);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: -1;
+    }
+
+    .transition-btn:hover {
+      background: var(--card);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .transition-btn:hover::before {
+      opacity: 0.1;
+    }
+
+    .transition-btn:focus-visible {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+
+    .transition-btn:active {
+      transform: translateY(0);
+    }
+
+    .transition-btn.queued {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .transition-btn.queued::after {
+      content: ' (queued)';
+      font-size: 12px;
+      opacity: 0.8;
+    }
+
+    .no-transitions {
+      color: var(--muted);
+      font-style: italic;
+      font-size: 14px;
+    }
+
+    .debug-panel {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      max-width: 300px;
+    }
+
+    .debug-panel .label {
+      color: var(--accent);
+    }
+
+    /* Hidden preloader container */
+    .preloader-container {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 16px;
+        gap: 24px;
+      }
+
+      .video-wrapper {
+        aspect-ratio: 16 / 9;
+      }
+
+      .transition-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+      }
+
+      .state-indicator {
+        top: 10px;
+        left: 10px;
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .state-indicator .dot {
+        animation: none;
+      }
+      .loading-spinner {
+        animation: none;
+      }
+      video {
+        transition: none;
+      }
+    }
+    .btn-vbox {
+      position: absolute;
+      top: 20px;
+      right: 110px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 10;
+    }
+    .action-btn {
+      /* width: 160px; */
+      height: 40px;
+      background-color: #d8820b; /* pale orange */
+      color: white;
+      border: 2px solid white;
+      border-radius: 15px; /* large rounded corners */
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: none;
+      opacity: 0;
+    }
+    .action-btn.active {
+      display: inline;
+      opacity: 1;
+    }
+
+    .action-btn:hover {
+      background-color: #FF9F2E; /* slightly darker on hover */
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="video-wrapper">
+      <div class="btn-vbox">
+        <button id="btn1" class="action-btn">Button1</button>
+        <button id="btn2" class="action-btn">Button2</button>
+        <button id="btn3" class="action-btn">Button3</button>
+        <button id="btn4" class="action-btn">Button4</button>
+        <button id="btn5" class="action-btn">Button5</button>
+      </div>
+      <div id="videoStack" class="video-stack">
+        <video id="videoA" preload="auto" autoplay muted playsinline class="active"></video>
+        <video id="preloadVideo" preload="auto" autoplay muted playsinline></video>
+      </div>
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">
+          Preloading videos... <span class="loading-progress" id="loadingProgress">0%</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Hidden container for preloading videos -->
+  </div>
+
+  <script>
+    // ============================================================
+    // GRAPH DEFINITION - EDIT THIS SECTION
+    // ============================================================
+    
+    const GRAPH = {
+      // Starting node ID
+      startNode: "breath",
+      
+      // Base path for all videos (prepended to all video paths)
+      basePath: "./stage_4_outputs/",
+      
+      // Node definitions
+      // Each node has:
+      //   - video: the state video file (plays when entering this state)
+      //   - transitions: array of outbound edges
+      //     - target: target node ID
+      //     - video: transition video file
+      //     - label: button text (null for self-loops)
+      //     - isLoop: true if this is a self-loop connector (no button shown)
+      nodes: {
+        "breath": {
+          video: "breath-middle.webm",
+          transitions: [
+            { name: "breath-to-breath", video: "breath_TO_breath.webm", label: null, isLoop: true },
+            { name: "breath_TO_look-down", video: "breath_TO_look-down.webm", label: "Look Down" },
+            { name: "breath_TO_double-v", video: "breath_TO_double-v.webm", label: "V-Sign" },
+            { name: "breath_TO_facing-away", video: "breath_TO_facing-away.webm", label: "Turn Around" },
+            { name: "breath_TO_blame", video: "breath_TO_blame.webm", label: "Blame" },
+            { name: "breath_TO_sports", video: "breath_TO_sports.webm", label: "Shirt Off" },
+          ],
+        },
+        "blame-middle": {
+          video: "blame-middle.webm",
+          transitions: [
+            { name: "blame_TO_breath", video: "blame_TO_breath.webm", label: null },
+          ],
+        },
+        "facing_away_middle": {
+          video: "facing_away_middle.webm",
+          transitions: [
+            { name: "facing-away_TO_facing-away", video: "facing-away_TO_facing-away.webm", isLoop: true },
+            { name: "facing-away_TO_breath", video: "facing-away_TO_breath.webm", label: "Turn Around" },
+          ],
+        },
+        "breath-to-breath": {
+          video: "breath_TO_breath.webm",
+          transitions: [
+            { name: "breath", video: "breath-middle.webm", label: null }
+          ]
+        },
+        "breath_TO_look-down": {
+          video: "breath_TO_look-down.webm",
+          transitions: [
+            { name: "look-down_middle", video: "look-down_middle.webm", label: null }
+          ],
+          previous: "breath",
+        },
+        "breath_TO_sports": {
+          video: "breath_TO_sports.webm",
+          transitions: [
+            { name: "sports-middle", video: "sports-middle.webm", label: null }
+          ],
+          previous: "breath",
+          endingTransition: true,
+        },
+        "breath_TO_blame": {
+          video: "breath_TO_blame.webm",
+          transitions: [
+            { name: "blame-middle", video: "blame-middle.webm", label: null }
+          ],
+          previous: "breath",
+        },
+        "breath_TO_double-v": {
+          video: "breath_TO_double-v.webm",
+          transitions: [
+            { name: "double-v_middle", video: "double-v_middle.webm", label: null }
+          ],
+          previous: "breath",
+        },
+        "breath_TO_facing-away": {
+          video: "breath_TO_facing-away.webm",
+          transitions: [
+            { name: "facing_away_middle", video: "facing_away_middle.webm", label: null }
+          ],
+          previous: "breath",
+          endingTransition: true,
+        },
+        "look-down_middle": {
+          video: "look-down_middle.webm",
+          transitions: [
+            { name: "look-down_TO_breath", video: "look-down_TO_breath.webm", label: null }
+          ]
+        },
+        "sports-middle": {
+          video: "sports-middle.webm",
+          transitions: [
+            { name: "sports_TO_sports", video: "sports_TO_sports.webm", isLoop: true },
+            { name: "sports_TO_breath", video: "sports_TO_breath.webm", label: "Shirt On" },
+            { name: "finger", video: "finger.webm", label: "Take It Off" },
+          ]
+        },
+        "sports_TO_sports": {
+          video: "sports_TO_sports.webm",
+          transitions: [
+            { name: "sports-middle", video: "sports-middle.webm", label: null },
+          ]
+        },
+        "double-v_middle": {
+          video: "double-v_middle.webm",
+          transitions: [
+            { name: "double-v_TO_breath", video: "double-v_TO_breath.webm", label: null }
+          ]
+        },
+        "finger": {
+          video: "finger.webm",
+          transitions: [
+            { name: "sports-middle", video: "sports-middle.webm", label: null }
+          ],
+          previous: "sports-middle",
+          endingTransition: true,
+        },
+        "facing-away_TO_facing-away": {
+          video: "facing-away_TO_facing-away.webm",
+          transitions: [
+            { name: "facing_away_middle", video: "facing_away_middle.webm", label: null }
+          ]
+        },
+        "facing-away_TO_breath": {
+          video: "facing-away_TO_breath.webm",
+          transitions: [
+            { name: "breath", video: "breath-middle.webm", label: null }
+          ],
+          previous: "facing_away_middle",
+          endingTransition: true,
+        },
+        "double-v_TO_breath": {
+          video: "double-v_TO_breath.webm",
+          transitions: [
+            { name: "breath", video: "breath-middle.webm", label: null }
+          ],
+          endingTransition: true,
+        },
+        "look-down_TO_breath": {
+          video: "look-down_TO_breath.webm",
+          transitions: [
+            { name: "breath", video: "breath-middle.webm", label: null }
+          ],
+          endingTransition: true,
+        },
+        "sports_TO_breath": {
+          video: "sports_TO_breath.webm",
+          transitions: [
+            { name: "breath", video: "breath-middle.webm", label: null }
+          ],
+          endingTransition: true,
+        },
+        "blame_TO_breath": {
+          video: "blame_TO_breath.webm",
+          transitions: [
+            { name: "breath", video: "breath-middle.webm", label: null }
+          ],
+          endingTransition: true,
+        },
+
+      }
+    };
+
+    // ============================================================
+    // VIDEO PRELOADER (No-Fetch Version)
+    // ============================================================
+
+    class VideoPreloader {
+      constructor(graph) {
+        this.graph = graph;
+        this.cache = new Map(); 
+        this.preloadedVideos = new Set();
+        this.container = document.getElementById('preloaderContainer');
+      }
+
+      resolvePath(videoPath) {
+        return this.graph.basePath + videoPath;
+      }
+
+      getAllVideoPaths() {
+        const paths = new Set();
+        for (const [nodeId, node] of Object.entries(this.graph.nodes)) {
+          paths.add(this.resolvePath(node.video));
+          for (const transition of node.transitions) {
+            paths.add(this.resolvePath(transition.video));
+          }
+        }
+        return Array.from(paths);
+      }
+
+      // Preload using hidden video elements (works with local files)
+      async preloadAll(onProgress) {
+        const paths = this.getAllVideoPaths();
+        let loaded = 0;
+        
+        const promises = paths.map((path) => {
+          return new Promise((resolve) => {
+            const video = document.createElement('video');
+            video.preload = 'auto';
+            video.src = path;
+            
+            const cleanup = () => {
+              video.removeEventListener('canplaythrough', onSuccess);
+              video.removeEventListener('error', onError);
+            };
+            
+            const onSuccess = () => {
+              cleanup();
+              this.cache.set(path, video);
+              loaded++;
+              onProgress(Math.round((loaded / paths.length) * 100));
+              resolve();
+            };
+            
+            const onError = () => {
+              cleanup();
+              console.warn(`Failed to preload: ${path}`);
+              loaded++;
+              onProgress(Math.round((loaded / paths.length) * 100));
+              resolve(); // Resolve anyway to not block execution
+            };
+            
+            video.addEventListener('canplaythrough', onSuccess);
+            video.addEventListener('error', onError);
+            
+            // Start loading
+            video.load();
+          });
+        });
+        
+        await Promise.all(promises);
+      }
+      
+      // Returns a video element clone or the original path
+      getVideoSrc(videoPath) {
+        const resolved = this.resolvePath(videoPath);
+        return resolved;
+      }
+    }
+
+    // ============================================================
+    // VIDEO STATE MACHINE
+    // ============================================================
+
+    class VideoStateMachine {
+      constructor(graph, preloader) {
+        this.graph = graph;
+        this.preloader = preloader;
+        
+        this.videoA = document.getElementById('videoA');
+        this.videoPre = document.getElementById('preloadVideo')
+        this.activeVideo = this.videoA;
+        this.preloadVideo = this.videoPre;
+
+        this.controls = [
+          document.getElementById('btn1'),
+          document.getElementById('btn2'),
+          document.getElementById('btn3'),
+          document.getElementById('btn4'),
+          document.getElementById('btn5'),
+        ];
+        this.controlActions = [];
+        
+        this.currentNodeId = null;
+        this.queuedTransition = null;
+        this.isPlayingLoopConnector = false;
+        this.isTransitioning = false;
+        this.loadingOverlay = document.getElementById('loadingOverlay');
+        
+        this.handleVideoEnded = this.handleVideoEnded.bind(this);
+        this.handleControlClick = this.handleControlClick.bind(this);
+        this.isHandlingEnded = true;
+        this.queue = [];
+        this.inTransition = false;
+
+        this.controls.forEach((btn, i) => {
+           btn.addEventListener('mousedown', () => this.handleControlClick(i));
+        });
+      }
+
+      async start() {
+        const currentNodeId = this.graph.startNode;
+        this.loadingOverlay.classList.add('hidden');
+
+        const startNode = this.graph.nodes[currentNodeId];
+        const src = this.preloader.getVideoSrc(startNode.video);
+        this.preloadVideo.src = src;
+        this.queue.push(currentNodeId);
+
+        this.videoA.addEventListener("ended", this.handleVideoEnded, { once: true });
+        this.playVid();
+      }
+
+      async playVid() {
+        this.swapVideos();
+        this.activeVideo.play();
+
+        const nodeId = this.queue.shift()
+        const node = this.graph.nodes[nodeId];
+
+        var nextNodeId;
+        if (this.queue.length == 0) {
+          nextNodeId = node.transitions[0].name;
+          this.queue.push(nextNodeId);
+        } else {
+          nextNodeId = this.queue[0];
+        }
+
+        const nextNode = this.graph.nodes[nextNodeId]
+        const nextVideoPath = nextNode.video;
+        const srcNext = this.preloader.getVideoSrc(nextVideoPath);
+
+        this.preloadVideo.src = srcNext;
+        this.preloadVideo.pause();
+
+        this.updateUI();
+        
+        if (node.endingTransition) {
+          this.inTransition = false;
+        }
+      }
+
+      swapVideos() {
+        const act = this.activeVideo
+        const pre = this.preloadVideo
+
+        pre.classList.add("active");
+        act.classList.remove("active");
+        act.removeEventListener("ended", this.handleVideoEnded);
+        pre.removeEventListener("ended", this.handleVideoEnded)
+        pre.addEventListener("ended", this.handleVideoEnded, { once: true });
+        
+        this.activeVideo = pre;
+        this.preloadVideo = act;
+      }
+
+      handleVideoEnded() {
+        console.log('video ended');
+        console.log(this.queue);
+
+        this.playVid();
+      }
+
+      handleControlClick(n) {
+        console.log(`Button ${n} pushed with action '${this.controlActions[n]}'`);
+        console.log("Old queue: ", this.queue);
+        const addNode = this.graph.nodes[this.controlActions[n]];
+        if (this.queue[this.queue.length - 1] == addNode.previous) {
+          this.queue.push(this.controlActions[n]);
+        } else {
+          // this.queue.push(addNode.previous);
+          // this.queue.push(this.controlActions[n]);
+          this.queue[this.queue.length - 1] = this.controlActions[n];
+          const srcNext = this.preloader.getVideoSrc(addNode.video);
+          this.preloadVideo.src = srcNext;
+          this.preloadVideo.pause();
+        }
+        console.log("New queue: ", this.queue);
+        
+        // Clear UI
+        for (var i = 0; i < this.controls.length; i++) {
+          this.controls[i].classList.remove('active');
+          this.controlActions = [];
+        }
+        this.inTransition = true;
+      }
+
+      updateUI() {
+        const currentNode = this.graph.nodes[this.queue[0]];
+        const currentNodeHasLoop = currentNode.transitions.find(t => t.isLoop) != undefined;
+        if (!currentNodeHasLoop || this.inTransition) {
+          return;
+        }
+
+        const transitions = currentNode.transitions.filter(t => !t.isLoop);
+        for (var i = 0; i < this.controls.length; i++) {
+          if (transitions[i]) {
+            this.controls[i].innerText = transitions[i].label;
+            this.controls[i].classList.add('active');
+            this.controlActions[i] = transitions[i].name
+          }
+        }
+      }
+    }
+    // ============================================================
+    // INITIALIZATION
+    // ============================================================
+
+    async function init() {
+      const preloader = new VideoPreloader(GRAPH);
+      const stateMachine = new VideoStateMachine(GRAPH, preloader);
+      
+      const progressEl = document.getElementById('loadingProgress');
+      
+      await preloader.preloadAll((progress) => {
+        progressEl.textContent = `${progress}%`;
+      });
+      
+      await stateMachine.start();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>
