@@ -294,44 +294,10 @@
       pointer-events: none;
     }
 
-    @media (max-width: 768px) {
-      body {
-        padding: 16px;
-        gap: 24px;
-      }
-
-      .video-wrapper {
-        aspect-ratio: 16 / 9;
-      }
-
-      .transition-btn {
-        padding: 12px 20px;
-        font-size: 14px;
-      }
-
-      .state-indicator {
-        top: 10px;
-        left: 10px;
-        padding: 6px 10px;
-        font-size: 11px;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .state-indicator .dot {
-        animation: none;
-      }
-      .loading-spinner {
-        animation: none;
-      }
-      video {
-        transition: none;
-      }
-    }
     .btn-vbox {
       position: absolute;
       top: 20px;
-      right: 50px;
+      right: 110px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -361,6 +327,61 @@
       background-color: #FF9F2E; /* slightly darker on hover */
       transform: scale(1.05);
     }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 0; /* Reduce padding; adjust as needed */
+        justify-content: flex-start; /* Allow natural vertical flow */
+        overflow-y: auto; /* Enable scrolling if video is taller than viewport */
+      }
+
+      .container {
+        height: auto; /* Remove 100% height constraint */
+        justify-content: flex-start;
+      }
+
+      video {
+        width: 100%;
+        height: auto;
+        border-radius: 0;
+      }
+
+      .video-wrapper {
+        width: 100%;
+        max-width: none;
+        height: auto;
+        aspect-ratio: auto; /* Remove forced 16/9 ratio */
+        display: flex;
+        align-items: center; /* Vertically center video within wrapper */
+        justify-content: center;
+      }
+
+      .btn-vbox {
+        top: 10px;
+        right: 10px;
+        justify-content: center;
+        margin-bottom: 12px;
+      }
+
+      .action-btn {
+        display: inline-flex; /* Ensure hidden buttons still take space when active */
+        min-width: 100px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .state-indicator .dot {
+        animation: none;
+      }
+      .loading-spinner {
+        animation: none;
+      }
+      video {
+        transition: none;
+      }
+    }
+
+    
   </style>
 </head>
 <body>
